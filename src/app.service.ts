@@ -2,7 +2,7 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import { CreateOrderPayload } from './types/CreateOrderPayload.interface';
 import { OrderEntity } from './entities/order.entity';
 import { OrderItemEntity } from './entities/order-item.entity';
-import { Repository } from 'typeorm';
+import { Not, Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { KafkaProducerService } from './kafka/producer.service';
 import { KAFKA_TOPICS } from './kafka/topics';
@@ -38,6 +38,20 @@ export class AppService {
       return {
         status: HttpStatus.INTERNAL_SERVER_ERROR,
         message: 'Error creating order',
+      };
+    }
+
+    // Check All the products are available in stock
+    // TODO - Get Available Stock from the redis cache instead of the payload, if not available in the cache, get it from the DB
+    const unavailableProducts = orderData.products.filter(
+      (product) => product.availableStock < product.quantity,
+    );
+    if (unavailableProducts.length > 0) {
+      return {
+        status: HttpStatus.BAD_REQUEST,
+        message:
+          'Some products are not available in stock. Cannot proceed with the order.',
+        unavailableProducts,
       };
     }
 
@@ -78,6 +92,64 @@ export class AppService {
       message: 'Order created successfully',
       order_reference: orderRef,
     };
+
+    // Update Cache
+  }
+
+  async cancelOrder(orderId: string) {
+    // Get order details using orderId
+    const order = await this._orderEntity.findOne({
+      where: { id: orderId, status: Not('CANCELLED') },
+    });
+
+    if (!order) {
+      return {
+        status: HttpStatus.NOT_FOUND,
+        message: 'Order not found',
+      };
+    }
+
+    // Delete order items using order_reference
+    const orderItems = await this._orderItemEntity.find({
+      where: { order_reference: order.order_reference },
+    });
+
+    // Send Kafka event to update stock
+
+    if (orderItems.length > 0) {
+      orderItems.forEach(async (item) => {
+        await this._kafkaProducerService
+          .sendMessage(KAFKA_TOPICS.ORDER_CANCELLED, [
+            {
+              key: `${order.order_reference}-${item.product_id}`,
+              value: JSON.stringify({
+                productId: item.product_id,
+                quantity: item.quantity,
+              }),
+            },
+          ])
+          .catch((err) => {
+            throw new Error(
+              `Error sending Kafka message - ${JSON.stringify(err)}`,
+            );
+          });
+      });
+
+      // Delete order items from the database
+      await this._orderItemEntity.delete({
+        order_reference: order.order_reference,
+      });
+    }
+    // Update the order status to CANCELLED
+    order.status = 'CANCELLED';
+    const orderEntity = this._orderEntity.create(order);
+    const orderResponse = await this._orderEntity.save(orderEntity);
+    if (!orderResponse) {
+      return {
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        message: 'Error cancelling order',
+      };
+    }
 
     // Update Cache
   }

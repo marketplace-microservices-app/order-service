@@ -6,6 +6,7 @@ import { OrderEntity } from './entities/order.entity';
 import { OrderItemEntity } from './entities/order-item.entity';
 import { KafkaModule } from './kafka/kafka.module';
 import { KafkaProducerService } from './kafka/producer.service';
+import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { KafkaProducerService } from './kafka/producer.service';
     }),
     TypeOrmModule.forFeature([OrderEntity, OrderItemEntity]),
     KafkaModule,
+    ScheduleModule.forRoot(),
   ],
   controllers: [AppController],
   providers: [AppService, KafkaProducerService],

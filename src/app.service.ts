@@ -6,6 +6,7 @@ import { Not, Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { KafkaProducerService } from './kafka/producer.service';
 import { KAFKA_TOPICS } from './kafka/topics';
+import { Cron } from '@nestjs/schedule';
 
 @Injectable()
 export class AppService {
@@ -152,5 +153,27 @@ export class AppService {
     }
 
     // Update Cache
+  }
+
+  // Update Pending Status Cron Job - Every 10 minutes
+  @Cron('*/10 * * * *')
+  async updatePendingStatus() {
+    // Get all orders with status PENDING and created more than 10 minutes ago
+    const pendingOrders = await this._orderEntity.find({
+      where: {
+        status: 'PENDING',
+      },
+    });
+
+    console.log(
+      `Found ${pendingOrders.length} pending orders at ${new Date()}`,
+    );
+
+    if (pendingOrders.length > 0) {
+      pendingOrders.forEach(async (order) => {
+        order.status = 'COMPLETED';
+        await this._orderEntity.save(order);
+      });
+    }
   }
 }

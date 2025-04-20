@@ -19,4 +19,10 @@ export class AppController {
     const { orderId: id } = orderId;
     return this.appService.cancelOrder(id);
   }
+
+  @MessagePattern('order.get-orders-by-buyerId')
+  @Post('get-orders-by-buyerId')
+  getAllOrdersByBuyerId(@Payload() buyerId) {
+    return this.appService.getAllOrdersByBuyerId(buyerId);
+  }
 }

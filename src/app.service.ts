@@ -155,6 +155,37 @@ export class AppService {
     // Update Cache
   }
 
+  async getAllOrdersByBuyerId(buyerId: string) {
+    // Get All Order References for the userId
+    const orders = await this._orderEntity.find({
+      where: { buyer_id: buyerId },
+    });
+    if (!orders) {
+      return {
+        status: HttpStatus.NOT_FOUND,
+        message: 'No orders found for the user',
+      };
+    }
+
+    const ordersWithItems = await Promise.all(
+      orders.map(async (order) => {
+        const orderItems = await this._orderItemEntity.find({
+          where: { order_reference: order.order_reference },
+        });
+        return {
+          ...order,
+          order_items: orderItems,
+        };
+      }),
+    );
+
+    return {
+      status: HttpStatus.OK,
+      message: 'Orders fetched successfully',
+      ordersWithItems,
+    };
+  }
+
   // Update Pending Status Cron Job - Every 10 minutes
   @Cron('*/10 * * * *')
   async updatePendingStatus() {

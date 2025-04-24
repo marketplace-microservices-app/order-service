@@ -9,7 +9,7 @@ export class KafkaProducerService implements OnModuleInit, OnModuleDestroy {
   constructor() {
     const config: KafkaConfig = {
       clientId: 'order-service',
-      brokers: ['localhost:9092'],
+      brokers: [process.env.KAFKA_BROKER || ''],
     };
 
     this.kafka = new Kafka(config);
